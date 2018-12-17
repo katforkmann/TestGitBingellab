@@ -4,3 +4,5 @@ Hello AG Bingel
 Tamas: it works, like a charm!
 
 Schnick Schnack Schnuck
+
+Test from RStuio
