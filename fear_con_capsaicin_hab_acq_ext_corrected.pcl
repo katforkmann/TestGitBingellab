@@ -1,0 +1,1167 @@
+#=========================================================================
+# Scenario file adjusted by marvdsch for capsaicin experiment (jan 2018)
+# Durations of trials: CS (+VAS) for 9 sec, reinforcement starts after 7,5 sec with a duration of 8 sec
+# 
+# All experiment phases are now in subroutines, which are called at the end of the file. 
+#
+#CS                     EDA	       ITI
+#|--------------------||------------||-----|   						# CS for 9000ms,  					EDA for 10500 sec, and ITI 
+#CS+VAS          CS     EDA		    ITI
+#|---------------|----||------------||-----|   						# VAS for 7000ms, CS for 2000ms, EDA for 10500 sec, and ITI
+#CS+VAS          CS US   	   EDA	 (+VAS)  ITI
+#|---------------|-|==|======||-----||------||----| 		# VAS for 7000ms, CS for 500ms, overlap CS+UCS for 1500ms, UCS for 6500 ms, EDA for 4 sec (+VAS till respons), ITI
+#CS                 US        EDA	 (+VAS)  ITI
+#|-----------------|==|======||-----||------||----|    	# CS for  8000ms,  				  overlap CS+UCS for 1500ms, UCS for 6500 ms, EDA for 4 sec (+VAS till respons), ITI
+
+# Requirements order stimili:
+# - same amount of stimuli of each type in first and second half
+# - same amount of reinforcements in first and second half
+# - first and last stimulus of each type should be reinforced
+# - no more than 2 of the same type in a row
+
+# Requirements reinforcements: 
+# - same nr of reinfocements in first and second half
+# - first and last reinforced 
+
+#==========================================
+#-----------------PCL part-----------------
+#==========================================
+
+#include "vas_gesamt_capsaicin.pcl"
+include "vas_painrelief_capsaicin.pcl";
+
+string subject = logfile.subject();#preset string subject = "calpilot";
+preset int RandomNumber = 1;  # 1-3 --> which cue is CS+ and CS-
+preset string ExperimentOrder = "Order for stimuli: 1-6 (should match MEDOC program!)";	# 1-6 --> which fixed trialorder
+preset string Relief 	= "Relief"; 
+preset string VAS40 		= "VAS40"; 
+preset string VAS80 		= "VAS80"; 
+
+string CS_Val_rating 	= "999";
+string UCSVasAcq_pain 	= "999";
+string UCSVasAcq_ples 	= "999";
+string ValHab 				= ""; 	#used for all 3 CS ratings during Hab
+
+#### MAKE LOGFILES: 
+output_file output_fearcon_capsaicin_hab = new output_file;
+output_fearcon_capsaicin_hab.open_append("output\\subj_" + subject + "_fearcon_capsaicin_hab.txt");
+
+output_file output_fearcon_capsaicin_acq = new output_file;
+output_fearcon_capsaicin_acq.open_append("output\\subj_" + subject + "_fearcon_capsaicin_acq.txt");
+
+output_file output_fearcon_capsaicin_con = new output_file;
+output_fearcon_capsaicin_con.open_append("output\\subj_" + subject + "_fearcon_capsaicin_con.txt");
+
+output_file output_fearcon_capsaicin_ext = new output_file;
+output_fearcon_capsaicin_ext.open_append("output\\subj_" + subject + "_fearcon_capsaicin_ext.txt");
+
+### Trigger Port Codes wegen der SCR
+int port_code_CSPain 	= 64;
+int port_code_CSRelief 	= 64; # includede for capsaicin
+int port_code_CSMinus 	= 64;
+
+int port_code_UCSPain 	= 66; # 66
+int port_code_UCSRelief	= 66; # 66 # includede for capsaicin -- use different portcodes?
+
+## COUNTERS
+int pain_count					= 1;# count fuer alle tone trials in acq 16
+int relief_count				= 1;
+int minus_count				= 1;
+
+int pain_count_ext			= 1;
+int relief_count_ext			= 1;
+int minus_count_ext			= 1;
+
+int pain_reinforced_count	= 1;
+int relief_reinforced_count= 1;
+int minus_reinforced_count = 1;
+
+string CS_reinforced 		= "1"; 
+
+### DURATIONS ETC.
+int VAS_min_rating			= 25; 	#25
+int VAS_max_rating			= 75; 	#75
+int VAS_dur_US					= 30000; 										# longer duration for pain ratings, this one is also response dependent
+
+
+int ITI_min_duration 					= 6000; 								#600
+int ITI_max_duration 					= 11000;								#1100
+int l_ITI_dur 								= 1000; 
+
+int VAS_dur									= 7000; 								# 7500 --> capsaicin 7500, only for CS raings
+int CS_dur 									= 9000; 								# 9000
+int CS_dur_hab								= 2000; 
+int UCS_dur 								= 8000; 								# 2500 --> capsaicin 8000
+int overlay 								= 1500; 								# 1000 --> capsaicin 1500
+int eda_delay_duration					= 4000; 								# 4000
+
+int CS_dur_if_valrating 				= CS_dur - VAS_dur; 				# 9000 - 7000 = 2000 --> for capsaicin: subject will have 7 seconds to respon to the VAS rating. (old was 7500)
+int CS_dur_if_reinforced 				= CS_dur - overlay; 				# 7500; 	# 9000 - 1500 = 7500 --> overlay for capsaicin = 1500
+int CS_dur_if_reinforced_Valrating 	= CS_dur - VAS_dur - overlay; # 500; # 9000 - 7000 - 1500 = 500
+int CS_dur_conting_rating 				= CS_dur - overlay;				# 7500; Time before contingency question comes up (= same as CS during experiment).
+int pause_dur_if_notreinforced 		= UCS_dur - overlay;				# 
+
+int valrating_count	= 4; # nach wie vielen CS (einer Art) soll geratet werden? # 4=4 measures
+int vasrating_count	= 4; # 4.  nach wie vielen UCS (einer Art) soll geratet werden? # 4=3 measures
+
+output_port oport = output_port_manager.get_port( 1 );
+
+####################################################
+# Zuordnung der visuellen CS zu den Randomisierungen
+####################################################
+
+	int picpain = 0; 	
+	int picnoch = 0;	
+	int picrelf = 0;	
+
+if RandomNumber == 1 then
+	pic1.set_stimulus(Bild_1);
+	pic1.set_event_code("CS+ Pain"); 
+	pic2.set_stimulus(Bild_2);
+	pic2.set_event_code("CS-");
+	pic3.set_stimulus(Bild_3);
+	pic3.set_event_code("CS+ relief");
+	
+	picpain = 1; 	# = Quadrat
+	picnoch = 2;	# = Rechteck
+	picrelf = 3;	# = Raute
+	
+elseif RandomNumber == 2 then
+	pic1.set_stimulus(Bild_2);
+	pic1.set_event_code("CS+ Pain");
+	pic2.set_stimulus(Bild_3);
+	pic2.set_event_code("CS-");
+	pic3.set_stimulus(Bild_1);
+	pic3.set_event_code("CS+ relief");
+	
+	picpain = 2;
+	picnoch = 3;
+	picrelf = 1;
+	
+elseif RandomNumber == 3 then
+	pic1.set_stimulus(Bild_3);
+	pic1.set_event_code("CS+ Pain");
+	pic2.set_stimulus(Bild_1);
+	pic2.set_event_code("CS-");
+	pic3.set_stimulus(Bild_2);
+	pic3.set_event_code("CS+ relief");
+	
+	picpain = 3;
+	picnoch = 1;
+	picrelf = 2;
+	
+end;
+
+########################################################
+# SET STIMULI ORDER
+########################################################
+
+### Aquisistion stimili: 			48 trials, 16 of each type (CSminus, CSpain, CSrelief), 12 reinforced, use fixed order for both stimuli and reinforcements?  
+### Aquisition reinforcements: 	2*16=32 CS+ = of which 75% is reinforced = 24 reinforcements, order fixed bacause of thermode
+### See Input Files
+
+input_file  seq_Stim 			= new input_file;	
+seq_Stim.open("input\\Experiment_Order" + ExperimentOrder + ".txt");
+
+#Order experiment:
+#if StimuliOrder == 1 then
+#	array <int> trigger_codes[48] = {33,22,11,11,33,11,22,11,2,3,1,33,2,22,33,11,22,1,3,22,33,11,33,22,11,2,33,22,11,11,33,2,22,22,11,3,33,11,22,33,22,3,22,33,1,1,11,33};
+#elseif StimuliOrder == 2 then
+#	array <int> trigger_codes[48] = {33,33,11,3,11,22,11,22,1,33,22,11,11,11,33,3,22,2,33,22,2,1,22,33,3,11,1,33,22,1,3,11,2,33,2,11,22,22,11,22,22,11,33,33,33,22,33,11};
+#elseif StimuliOrder == 3 then
+#	array <int> trigger_codes[48] = {33,11,22,22,11,11,33,33,2,11,1,22,11,3,33,22,22,1,33,22,11,3,2,33,11,33,22,11,22,22,11,33,33,2,11,22,33,2,11,1,33,22,22,3,1,11,3,33};
+#elseif StimuliOrder == 4 then
+#	array <int> trigger_codes[48] = {11,33,33,22,22,22,11,3,33,33,1,3,1,11,33,2,22,11,11,11,33,2,22,22,1,3,11,11,11,22,33,3,22,33,11,11,2,22,22,2,33,33,1,11,33,33,22,22};
+#elseif StimuliOrder == 5 then
+#	array <int> trigger_codes[48] = {11,22,33,22,2,11,11,33,33,22,11,33,11,11,1,33,1,3,33,22,2,3,22,22,11,33,11,2,33,33,22,22,11,3,33,22,1,11,33,2,22,11,22,1,3,33,11,22};
+#elseif StimuliOrder == 6 then
+#	array <int> trigger_codes[48] = {11,22,33,11,22,33,2,3,11,33,22,22,33,11,11,33,11,2,3,1,33,22,22,1,11,22,3,11,11,33,1,22,1,22,33,33,22,33,2,11,11,22,2,3,33,11,22,33};
+#end; 
+
+
+### Extinction stimili: 36 trials, 12 of each type (CSminus, CSpain, CSrelief), no reinforcement, order shuffeled
+array <int> trigger_codes_ext[18]; 
+array <int> trigger_codes_ext2[18];
+array <int> trigger_codes_ext_half[18]= {1,1,1,1,1,1,2,2,2,2,2,2,3,3,3,3,3,3}; #array für Hälfte der trials der extinction phase
+
+#Loop to shuffle until the trigger_codes array contains max 2 in a row
+int repeats_good_ext=0;
+int repeats_good_ext2=0;
+	loop  until repeats_good_ext==1
+	begin
+		trigger_codes_ext_half.shuffle(); 
+		loop  int i = 3 until i == trigger_codes_ext_half.count()
+		begin
+			repeats_good_ext=1;
+				if trigger_codes_ext_half[i] == trigger_codes_ext_half[i-1] 
+					&& trigger_codes_ext_half[i-1] == trigger_codes_ext_half[i-2]then 
+					repeats_good_ext=0;	
+				break; 
+				end;
+			i=i+1;     
+		end;
+		trigger_codes_ext.assign(trigger_codes_ext_half); 
+	end; 
+
+	loop  until repeats_good_ext2==1
+	begin
+		trigger_codes_ext_half.shuffle(); 
+		loop  int i = 3 until i == trigger_codes_ext_half.count()
+		begin
+			repeats_good_ext2=1;
+				if trigger_codes_ext_half[i] == trigger_codes_ext_half[i-1] 
+					&& trigger_codes_ext_half[i-1] == trigger_codes_ext_half[i-2]then 
+					repeats_good_ext2=0; 
+				break; 
+				end;
+			i=i+1;     
+		end;
+		trigger_codes_ext2.assign(trigger_codes_ext_half); 
+	end;
+trigger_codes_ext.append(trigger_codes_ext2); 
+	
+###################################################
+# subroutinen acquisition conditions
+###################################################
+
+sub 
+	ITI (int ITI_dur)
+begin
+	term.print("ITI:" + string(ITI_dur) + "\t");
+	ITI_EVENT.set_duration(ITI_dur);
+	ITI_TRIAL.set_duration(ITI_dur);	
+	ITI_TRIAL.present();
+	#display_device.screenshot("ITI_CROSS.bmp");
+end;
+
+#subroutine eda_delay
+sub 
+	eda_delay 
+begin
+	term.print("EDA:" + string(eda_delay_duration) + "\t");
+	EDA_DELAY_EVENT.set_duration(eda_delay_duration);
+	EDA_DELAY_TRIAL.set_duration(eda_delay_duration);	
+	EDA_DELAY_TRIAL.present();
+	#display_device.screenshot("EDA_DELAY_BLACKSCREEN.bmp");
+end;
+
+sub 
+	eda_delay_if_not_reinforced 
+begin
+	term.print("EDA:" + string(eda_delay_duration + (UCS_dur - overlay)) + "\t");
+	EDA_DELAY_EVENT.set_duration(eda_delay_duration + (UCS_dur - overlay));
+	EDA_DELAY_TRIAL.set_duration(eda_delay_duration + (UCS_dur - overlay));	
+	EDA_DELAY_TRIAL.present();
+end;
+
+###############################################################################
+## ------------------ Subroutines for VAS ----------------------------------###
+###############################################################################
+
+sub 
+	string VAS_pain_Run_pain(int counter, int duration)
+begin 
+  
+	VAS_SetQuestion_Pain();	VAS_SetScale();
+	string pain_rating = VAS_US_RATING_time_response(random(25,75), duration); #VAS_US_RATING_time(counter, duration);
+		
+	LogEvent.set_event_code("VAS PAIN PAIN: " + pain_rating); WriteToLogFile.present();
+	term.print("VASpain Pain: " + pain_rating + "\t");
+	
+	return pain_rating;
+end;
+
+sub 
+	string VAS_pain_Run_ples(int counter, int duration)
+begin 
+   
+	VAS_SetQuestion_Pleasure(); VAS_SetScale_middle();
+	string ples_rating = VAS_US_RATING_time_response(random(25,75), duration); #VAS_US_RATING_time(counter, duration);
+		
+	LogEvent.set_event_code("VAS PLES pain: " + ples_rating); WriteToLogFile.present();
+	term.print("VASples pain: " + ples_rating + "\t");
+	
+	return ples_rating;
+end;
+
+sub 
+	string VAS_relief_Run_pain(int counter, int duration)
+begin 
+    
+	VAS_SetQuestion_Pain();	VAS_SetScale();
+	string pain_rating = VAS_US_RATING_time_response(random(25,75), duration); #VAS_US_RATING_time(counter, duration);
+		
+	LogEvent.set_event_code("VAS PAIN RELIEF: " + pain_rating); WriteToLogFile.present();
+	term.print("VASpain reli: " + pain_rating + "\t");
+	
+	return pain_rating;
+end;
+
+sub 
+	string VAS_relief_Run_ples(int counter, int duration)
+begin 
+    
+	VAS_SetQuestion_Pleasure(); VAS_SetScale_middle();
+	string ples_rating = VAS_US_RATING_time_response(random(25,75), duration); #VAS_US_RATING_time(counter, duration);
+		
+	LogEvent.set_event_code("VAS PLES RELIEF: " + ples_rating); WriteToLogFile.present();
+	term.print("VASples reli: " + ples_rating + "\t");
+	
+	return ples_rating;
+end;
+
+
+sub 
+	string VAS_nochange_Run_pain(int counter, int duration)
+begin 
+   
+	VAS_SetQuestion_Pain();	VAS_SetScale();
+	string pain_rating = VAS_US_RATING_time_response(random(25,75), duration); #VAS_US_RATING_time(counter, duration);
+		
+	LogEvent.set_event_code("VAS PAIN NOCHANGE: " + pain_rating); WriteToLogFile.present();
+	term.print("VASpain Noch: " + pain_rating + "\t");
+	
+	return pain_rating;
+end;
+
+sub 
+	string VAS_nochange_Run_ples(int counter, int duration)
+begin 
+   
+	VAS_SetQuestion_Pleasure(); VAS_SetScale_middle();
+	string ples_rating = VAS_US_RATING_time_response(random(25,75), duration); #VAS_US_RATING_time(counter, duration);
+		
+	LogEvent.set_event_code("VAS PLES NOCHA: " + ples_rating); WriteToLogFile.present();
+	term.print("VASples noch: " + ples_rating + "\t");
+	
+	return ples_rating;
+end;
+
+
+
+###############################################################################
+## ------------------ Subroutines for each trialtype -----------------------###
+###############################################################################
+
+
+sub CS_minus
+begin
+	dummycode.set_port_code(port_code_CSMinus);		# port codes used for SCR!!
+	dummycode.set_event_code(" "); #	
+	NOTHING.present();
+	
+	term.print("cs nocha\t");
+	term.print("VASCS None\t\t");
+	term.print("US None \t");	
+	
+	CS_Minus.present();
+	eda_delay_if_not_reinforced();
+	
+	CS_reinforced 		= "0";	
+	UCSVasAcq_pain		= "999"; 
+	UCSVasAcq_ples		= "999";
+	CS_Val_rating 		= "999";						
+end;
+
+sub string CS_minus_valence_rating
+begin
+	dummycode.set_port_code(port_code_CSMinus);				#Trigger of EDA
+	dummycode.set_event_code("START VAS VAL CS_Minus"); 	#damit nicht das rating vom mal davor steht
+	NOTHING.present();
+	
+	term.print("cs nocha\t");
+	
+	VAS_SetQuestion_CSRating(); VAS_SetScaleFigure (RandomNumber, 2);
+	string l_Val_rating = VAS_US_RATING_time(random(VAS_min_rating,VAS_max_rating), VAS_dur);
+	
+	LogEvent.set_event_code("VAS VAL CS_Minus: " + l_Val_rating); WriteToLogFile.present(); 	
+	term.print("VASCS Minus: " + l_Val_rating + "\t");	
+	
+	term.print("US None \t");
+	
+	CS_Minus.present();	#1500
+	eda_delay_if_not_reinforced();
+	
+	CS_reinforced 		= "0";
+	UCSVasAcq_pain		= "999"; 
+	UCSVasAcq_ples		= "999";
+	return l_Val_rating;		 			
+end;
+
+### pain trails 
+sub CS_Pain
+begin
+	dummycode.set_event_code(" "); #	
+	dummycode.set_port_code(port_code_CSPain);
+	NOTHING.present();
+	term.print("cs pain\t");
+	term.print("VASCS None\t\t");
+	term.print("US None \t");
+	
+	CS_Pain.present();
+	eda_delay_if_not_reinforced();
+	
+	CS_reinforced 		= "0";	
+	UCSVasAcq_pain		= "999"; 
+	UCSVasAcq_ples		= "999";
+	CS_Val_rating 		= "999";	
+end;
+
+sub CS_Pain_reinforced
+begin
+	dummycode.set_event_code(" "); #	
+	dummycode.set_port_code(port_code_CSPain);
+	NOTHING.present();
+	
+	term.print("cs pain\t");
+	term.print("VASCS None\t\t");
+	
+	
+	CS_Pain.present();
+			
+		term.print("US Pain \t ");
+		PAINSTIM_EVENT.set_port_code(port_code_UCSPain);	
+		PAINSTIM_EVENT.set_duration(overlay); 					# 1000	 Pain and CS
+		BLACKSCREEN_PAIN.set_time(overlay); 					# nach 1000	
+		BLACKSCREEN_PAIN.set_duration(UCS_dur-overlay); 	# 2500 - 1000 = 1500	  --> blackstreen +pain
+		PAINSTIM_TRIAL.set_duration(UCS_dur); 					# 2500
+		PAINSTIM_TRIAL.present(); 									#total trail 1 sec with CS and 1.5 with blackscreen
+	
+	eda_delay();
+	
+	CS_reinforced 		= "1";	
+	UCSVasAcq_pain		= "999"; 
+	UCSVasAcq_ples		= "999";
+	CS_Val_rating 		= "999";	
+end;
+
+
+sub string CS_Pain_valence_rating
+begin	
+	dummycode.set_event_code("START VAS VAL CS_Pain");#damit nicht das rating vom mal davor steht
+	dummycode.set_port_code(port_code_CSPain); #damit der trigger am anfang kommt
+	NOTHING.present();
+
+	term.print("cs pain\t");
+
+	VAS_SetQuestion_CSRating(); VAS_SetScaleFigure (RandomNumber, 1);
+	string l_Val_rating = VAS_US_RATING_time(random(VAS_min_rating,VAS_max_rating), VAS_dur);
+	
+	LogEvent.set_event_code("VAS VAL CS_Pain: " + l_Val_rating); WriteToLogFile.present();
+	term.print("VASCSPain: " + l_Val_rating + "\t");
+	term.print("US None \t");
+	
+	CS_Pain.present();	
+	eda_delay_if_not_reinforced();
+	
+	CS_reinforced 		= "0"; 
+	UCSVasAcq_pain		= "999"; 
+	UCSVasAcq_ples		= "999";
+	return l_Val_rating;		
+end;
+
+sub string CS_Pain_reinforced_valence_rating
+begin
+	dummycode.set_event_code("START VAS VAL CS_Pain");#damit nicht das rating vom mal davor steht
+	dummycode.set_port_code(port_code_CSPain); # send portcode to EDA
+	NOTHING.present();
+	
+	term.print("cs pain\t");
+	
+	VAS_SetQuestion_CSRating(); VAS_SetScaleFigure (RandomNumber, 1);
+	string l_Val_rating = VAS_US_RATING_time(random(VAS_min_rating,VAS_max_rating), VAS_dur);
+
+	LogEvent.set_event_code("VAS VAL CS_Pain: " + l_Val_rating); WriteToLogFile.present();
+	term.print("VAS CSPain: " + l_Val_rating + "\t");	
+
+	CS_Pain.present();	#duraton 500ms
+
+		term.print("US Pain \t");
+		PAINSTIM_EVENT.set_port_code(port_code_UCSPain);	
+		PAINSTIM_EVENT.set_duration(overlay); 					# 1000	 Pain and CS
+		BLACKSCREEN_PAIN.set_time(overlay); 					# nach 1000	
+		BLACKSCREEN_PAIN.set_duration(UCS_dur-overlay); 	# 2500 - 1000 = 1500	  --> blackstreen +pain
+		PAINSTIM_TRIAL.set_duration(UCS_dur); 					# 2500
+		PAINSTIM_TRIAL.present(); 									#total trail 1 sec with CS and 1.5 with blackscreen
+
+	eda_delay();
+	
+	CS_reinforced 		= "1"; 
+	UCSVasAcq_pain		= "999"; 
+	UCSVasAcq_ples		= "999";
+	return l_Val_rating;	
+end;
+
+
+### relief trials
+sub CS_Relief
+begin
+	dummycode.set_event_code(" "); #	
+	dummycode.set_port_code(port_code_CSRelief);
+	NOTHING.present();
+	
+	term.print("cs relief \t");
+	term.print("VASCS None\t\t");
+	term.print("US None \t");
+	
+	CS_Relief.present();
+	eda_delay_if_not_reinforced();
+	
+	CS_reinforced 		= "0";	
+	UCSVasAcq_pain		= "999"; 
+	UCSVasAcq_ples		= "999";
+	CS_Val_rating 		= "999";	
+end;
+
+sub CS_Relief_reinforced
+begin
+	dummycode.set_event_code(" "); #	
+	dummycode.set_port_code(port_code_CSRelief);
+	NOTHING.present();
+	
+	term.print("cs relief\t");
+	term.print("VASCS None\t");
+		
+	CS_Relief.present();
+	
+		term.print("US Relief \t");
+		PAINSTIM_EVENT.set_port_code(port_code_UCSPain);	
+		PAINSTIM_EVENT.set_duration(overlay); 					# 1000	 Pain and CS
+		BLACKSCREEN_PAIN.set_time(overlay); 					# nach 1000	
+		BLACKSCREEN_PAIN.set_duration(UCS_dur-overlay); 	# 2500 - 1000 = 1500	  --> blackstreen +pain
+		PAINSTIM_TRIAL.set_duration(UCS_dur); 					# 2500
+		PAINSTIM_TRIAL.present(); 									#total trail 1 sec with CS and 1.5 with blackscreen
+
+	eda_delay();
+	
+	CS_reinforced 		= "1";	
+	UCSVasAcq_pain		= "999"; 
+	UCSVasAcq_ples		= "999";
+	CS_Val_rating 		= "999";	
+end;
+
+
+sub string CS_Relief_valence_rating
+begin	
+	dummycode.set_event_code("START VAS VAL CS_Relief");	#damit nicht das rating vom mal davor steht
+	dummycode.set_port_code(port_code_CSRelief); 			#damit der trigger am anfang kommt
+	NOTHING.present();
+	 
+	term.print("cs relief\t");
+		
+	VAS_SetQuestion_CSRating(); VAS_SetScaleFigure (RandomNumber, 3);
+	string l_Val_rating = VAS_US_RATING_time(random(VAS_min_rating,VAS_max_rating), VAS_dur);
+	
+	LogEvent.set_event_code("VAS VAL CS_Relief: " + l_Val_rating);	WriteToLogFile.present();
+	term.print("VASCS Relief: " + l_Val_rating + "\t");
+	term.print("US None \t");
+	
+	CS_Relief.present();
+	eda_delay_if_not_reinforced();
+	
+	CS_reinforced 		= "0";
+	
+	UCSVasAcq_pain		= "999"; 
+	UCSVasAcq_ples		= "999";
+	return l_Val_rating;		
+end;
+
+sub string CS_Relief_reinforced_valence_rating
+begin
+	dummycode.set_event_code("START VAS VAL CS_Relief");#damit nicht das rating vom mal davor steht
+	dummycode.set_port_code(port_code_CSPain);
+	NOTHING.present();
+	
+	term.print("cs relief\t");
+		
+	VAS_SetQuestion_CSRating(); VAS_SetScaleFigure (RandomNumber, 3);
+	string l_Val_rating = VAS_US_RATING_time(random(VAS_min_rating,VAS_max_rating), VAS_dur);
+	
+	LogEvent.set_event_code("VAS VAL CS_Relief: " + l_Val_rating);	WriteToLogFile.present();
+	term.print("VASCS Relief: " + l_Val_rating + "\t");
+	
+	CS_Relief.present();
+	
+		term.print("US Relief \t");
+		PAINSTIM_EVENT.set_port_code(port_code_UCSPain);	
+		PAINSTIM_EVENT.set_duration(overlay); 					# 1000	 Pain and CS
+		BLACKSCREEN_PAIN.set_time(overlay); 					# nach 1000	
+		BLACKSCREEN_PAIN.set_duration(UCS_dur-overlay); 	# 2500 - 1000 = 1500	  --> blackstreen +pain
+		PAINSTIM_TRIAL.set_duration(UCS_dur); 					# 2500
+		PAINSTIM_TRIAL.present(); 									# total trail 1 sec with CS and 1.5 with blackscreen
+	
+	eda_delay();
+	
+	CS_reinforced = "1"; 
+	UCSVasAcq_pain		= "999"; 
+	UCSVasAcq_ples		= "999";
+	return l_Val_rating;	
+end;
+
+########################################################################################################################################################################
+########################################################################################################################################################################
+# Start experimental procedures:
+# 1. Habituation
+# 2. aquisition
+# 3. contingency questions
+# 4. extinction
+# 5. contingency questions
+########################################################################################################################################################################
+
+############################
+# 1. Habituation
+############################
+sub string Habituation
+begin	
+	# Header habituation file
+	string date_time = date_time_gmt();
+   output_fearcon_capsaicin_hab.print("\nStart Habituation:\t" + subject + "\tStimuli randomisation:\t" + string(RandomNumber) + "\tTime:\t" + date_time);  
+   output_fearcon_capsaicin_hab.print("\nCStype: 1 = CS+Pain, 2 = CS-nochange, 3 = CS+Relief"); 
+	output_fearcon_capsaicin_hab.print("\nFigure: 1 = Quadrat, 2 = Reckteck, 3 = Raute\n"); 
+	output_fearcon_capsaicin_hab.print("Temperatures: Relief = " + Relief + "\t"); 
+	output_fearcon_capsaicin_hab.print("VAS40 = "  + VAS40 + "\t");  
+	output_fearcon_capsaicin_hab.print("VAS80 = "  + VAS80 + "\t\n\n");  
+		
+	# Start Questions
+	term.print("\n \n Start Arousal/Anxiety Ratings \n *************************\n");
+	LogEvent.set_event_code("BEGIN QUESTIONS"); WriteToLogFile.present();
+	
+	ITI(l_ITI_dur);
+	
+	VAS_SetQuestion_ARO(); VAS_SetScale();
+	string Arousal = VAS_US_RATING(random(VAS_min_rating,VAS_max_rating)); # sub in VAS
+		
+	# print to terminal and logfiles
+	LogEvent.set_event_code( "VAS AROUSAL:" +  Arousal); WriteToLogFile.present();
+	term.print("VAS AROUSAL: " + Arousal + "\t");
+		
+	ITI(l_ITI_dur);
+	
+	VAS_SetQuestion_ANXPAIN();	VAS_SetScale();
+	string AnxPain = VAS_US_RATING(random(VAS_min_rating,VAS_max_rating)); # sub in VAS
+
+	# print to terminal and logfiles
+	LogEvent.set_event_code( "VAS AnxPain:" +  AnxPain); WriteToLogFile.present();
+	term.print("VAS AnxPain: " + AnxPain + "\n");
+	
+	output_fearcon_capsaicin_hab.print("\nVASARO\tVASANX \n");
+	output_fearcon_capsaicin_hab.print(Arousal + "\t" +	AnxPain + "\n\n");
+	
+	ITI(l_ITI_dur);
+	
+	### Habituation 
+	term.print("\n \n Start Habituation Phase \n *************************\n");
+	#output_fearcon_capsaicin_hab.print("trnr" + "\t" + "CS" + "\t" + "CStype" + "\t" + "VAS" + "\n"); 
+	output_fearcon_capsaicin_hab.print("trnr" + "\t" + "CStype" + "\t" + "Figure" + "\t" + "VASCS" + "\n"); 
+	
+	INSTRUCTION_HAB.present();
+	#display_device.screenshot("INSRT_HAB.bmp");
+
+		##fMRI triggering - unbedingt testen!!
+		#START_FMRI_EVENT.set_event_code("Start fmri");
+		#START_FMRI_TRIAL.set_duration(20);
+		#START_FMRI_TRIAL.present();
+		#BEGIN_TRIAL.present(); # marvdsch:removed the triggers and also this pne
+
+	array <int> trigger_codes_hab[9]= {1,1,1,2,2,2,3,3,3}; # 1=Pain, 2=nochange, 3=Relief
+	#array <int> trigger_codes_hab[3]= {1,2,3}; # test
+	trigger_codes_hab.shuffle(); 
+	
+	int figure = 0; 
+	
+	loop int trial_number_hab = 1 until trial_number_hab > trigger_codes_hab.count()
+	begin
+		if	trigger_codes_hab[trial_number_hab] == 1 then
+			ITI(random(ITI_min_duration, ITI_max_duration));
+			term.print("CS Pain     hab\t");
+		
+			VAS_SetQuestion_CSRating(); VAS_SetScaleFigure (RandomNumber, 1); #VAS_SetScale(); 
+			ValHab = VAS_US_RATING_time(random(VAS_min_rating,VAS_max_rating), VAS_dur); 
+			
+			CS_Pain.set_duration(CS_dur_hab);
+			#### neu eingebaut
+		   dummycode.set_event_code(" "); #	SEND EDA PORT CODE
+			dummycode.set_port_code(port_code_CSRelief);
+			NOTHING.present();
+			#### neu eingebaut
+			CS_Pain.present();
+			#display_device.screenshot("CS1.bmp");
+			figure = picpain;
+							
+			term.print("VAS: " + ValHab + "\n");
+			LogEvent.set_event_code("VAS VAL: " + ValHab); WriteToLogFile.present();
+			output_fearcon_capsaicin_hab.print(string(trial_number_hab) + "\t" + string(trigger_codes_hab[trial_number_hab]) + "\t" + string(figure) +  "\t" + ValHab + "\n"); 
+			
+		elseif	trigger_codes_hab[trial_number_hab] == 2 then
+			ITI(random(ITI_min_duration, ITI_max_duration));
+			term.print("CS Nochange hab\t");	
+			
+			VAS_SetQuestion_CSRating(); VAS_SetScaleFigure (RandomNumber, 2); #VAS_SetScale(); 
+			ValHab = VAS_US_RATING_time(random(VAS_min_rating,VAS_max_rating), VAS_dur); 
+	
+			CS_Minus.set_duration(CS_dur_hab);
+			#### neu eingebaut
+		   dummycode.set_event_code(" "); #	SEND EDA PORT CODE
+			dummycode.set_port_code(port_code_CSRelief);
+			NOTHING.present();
+			#### neu eingebaut
+			CS_Minus.present();
+			#display_device.screenshot("CS2.bmp");
+			figure = picnoch;
+			
+			
+			term.print("VAS: " + ValHab + "\n");
+			LogEvent.set_event_code("VAS VAL: " + ValHab);	WriteToLogFile.present();
+			output_fearcon_capsaicin_hab.print(string(trial_number_hab) + "\t" + string(trigger_codes_hab[trial_number_hab]) + "\t" + string(figure) +  "\t" + ValHab + "\n"); 
+			
+		elseif	trigger_codes_hab[trial_number_hab] == 3 then
+			ITI(random(ITI_min_duration, ITI_max_duration));					
+			term.print("CS relief   hab\t");		
+			
+			VAS_SetQuestion_CSRating(); VAS_SetScaleFigure (RandomNumber, 3); #VAS_SetScale(); 
+			ValHab = VAS_US_RATING_time(random(VAS_min_rating,VAS_max_rating), VAS_dur); 
+		
+			CS_Relief.set_duration(CS_dur_hab);
+			#### neu eingebaut
+		   dummycode.set_event_code(" "); #	SEND EDA PORT CODE
+			dummycode.set_port_code(port_code_CSRelief);
+			NOTHING.present();
+			#### neu eingebaut
+			CS_Relief.present();
+			#display_device.screenshot("CS3.bmp");
+			figure = picrelf;			
+			
+			term.print("VAS: " + ValHab + "\n");
+			LogEvent.set_event_code("VAS VAL: " + ValHab);	WriteToLogFile.present();
+			output_fearcon_capsaicin_hab.print(string(trial_number_hab) + "\t" + string(trigger_codes_hab[trial_number_hab]) + "\t" + string(figure) +  "\t" + ValHab + "\n");
+		end; 
+		trial_number_hab = trial_number_hab + 1;
+	end;	
+	
+	output_fearcon_capsaicin_hab.close();	
+	
+	LogEvent.set_event_code("END HABITUATION"); WriteToLogFile.present();	
+	term.print("\n \n End Habituation Phase \n *************************\n");
+	
+return subject;
+end;
+
+
+############################
+# 2. Aquisition
+############################
+
+sub string Aquisition
+begin
+	
+	LogEvent.set_event_code("BEGIN AQUISITION"); WriteToLogFile.present();
+	term.print("\n \n Start Acquisition Phase \n *************************\n");
+
+	# Header Aquisition file
+	string date_time = date_time_gmt();
+   output_fearcon_capsaicin_acq.print("\nStart Aquisistion:\t" + subject + "\tStimuli randomization:\t" + string(RandomNumber) + "\tOrder:\t" + ExperimentOrder + "\tTime:\t" + date_time);  
+   output_fearcon_capsaicin_acq.print("\nCStype: 1 = CS+Pain, 2 = CS-nochange, 3 = CS+Relief"); 
+	output_fearcon_capsaicin_acq.print("\nFigure: 1 = Quadrat, 2 = Reckteck, 3 = Raute"); 
+	output_fearcon_capsaicin_acq.print("\nReinf:  1 = reinforced, 0 = not reinforced"); 
+
+	output_fearcon_capsaicin_acq.print("\nVAS40:\t"  + VAS40 + "\t");  
+	output_fearcon_capsaicin_acq.print("VAS80:\t"  + VAS80 + "\t");  
+	output_fearcon_capsaicin_acq.print("Relief:\t" + Relief + "\n\n");  
+	
+	output_fearcon_capsaicin_acq.print("trnr" + "\t" + "CStype" + "\t" + "Figure"  + "\t" + "triggercode" + "\t" + "reinf" + "\t" + "VASCS" + "\t" + "USpain" + "\t" + "USples" + "\n"); 
+
+	INSTRUCTION_TRIAL.present();
+	#display_device.screenshot("INSTR_ACQ.bmp");
+	
+	ITI(random(ITI_min_duration, ITI_max_duration));
+	
+	int trial_number = 1;
+	int trigger_codes2 = 0;
+	int figure = 0; 
+	
+	# Aublauf der 48 trials
+	loop 
+	until seq_Stim.end_of_file()
+	begin
+		term.print("\n" + "Trial: " + string(trial_number) + "\t");
+		int trigger_codes	=   seq_Stim.get_int();	
+		
+		### 1 = CS Pain
+		if trigger_codes == 1 then # not reinforced
+			
+			if mod (pain_count,valrating_count) == 0 then 
+				term.print("nrPain:" + string(pain_count) + "\t");			
+				CS_Pain.set_duration(CS_dur_if_valrating); 	#1500
+				CS_Val_rating = CS_Pain_valence_rating();		#7500
+			else 
+				term.print("nrPain:" + string(pain_count) + "\t");					
+				CS_Pain.set_duration(CS_dur);	
+				CS_Pain();
+			end;
+			
+			CS_reinforced 				= "0";
+			trigger_codes2 = 1; 
+			figure = picpain;
+  
+			pain_count 					= pain_count + 1;	
+		
+		elseif trigger_codes == 11 then 
+			if mod (pain_count,valrating_count) == 0 then 
+				term.print("nrPain:" + string(pain_count) + "\t");			
+				CS_Pain.set_duration(CS_dur_if_reinforced_Valrating);	# 500 ms
+				CS_Val_rating = CS_Pain_reinforced_valence_rating(); #7500 Includes the PAINSTIM
+			else 
+				term.print("nrPain:" + string(pain_count) + "\t");
+				CS_Pain.set_duration(CS_dur_if_reinforced);	
+				CS_Pain_reinforced();
+			end;
+				
+			#VAS rating on 3rd reinforced trial
+			if mod (pain_reinforced_count,vasrating_count) == 0 then 
+				UCSVasAcq_pain = VAS_pain_Run_pain(random(VAS_min_rating,VAS_max_rating), VAS_dur_US); ITI(500);
+				UCSVasAcq_ples = VAS_pain_Run_ples(random(VAS_min_rating,VAS_max_rating), VAS_dur_US); 
+			end;
+			
+			CS_reinforced 				= "1"; 
+			trigger_codes2 = 1; 
+			figure = picpain; 
+			
+			pain_count 					= pain_count + 1;
+			pain_reinforced_count 	= pain_reinforced_count+1;
+			
+		### 2 = CS minus/no change
+		elseif	trigger_codes == 2 then
+			if mod (minus_count,valrating_count) == 0 then #Not reinforced & , if 4th trial --> valrating
+				term.print("nrMin: " + string(minus_count) + "\t");
+				CS_Minus.set_duration(CS_dur_if_valrating);	#1500
+				CS_Val_rating = CS_minus_valence_rating();	#7500
+			else 				
+				term.print("nrMin: " + string(minus_count) + "\t");
+				CS_Minus.set_duration(CS_dur);	#9000 ms
+				CS_minus();  
+			end;
+			
+			CS_reinforced 			= "0"; 
+			trigger_codes2 = 2; 
+			figure = picnoch; 
+			
+			minus_count 			= minus_count + 1;	
+		
+		elseif	trigger_codes == 22 then
+			if mod (minus_count,valrating_count) == 0 then #"reinforced" & , if 4th trial --> valrating
+				term.print("nrMin: " + string(minus_count) + "\t");
+				CS_Minus.set_duration(CS_dur_if_valrating);	#1500
+				CS_Val_rating = CS_minus_valence_rating();	#7500
+			else 				
+				term.print("nrMin: " + string(minus_count) + "\t");				
+				CS_Minus.set_duration(CS_dur);	#9000 ms
+				CS_minus();  
+			end;
+			
+			#VAS rating on 3rd reinforced trial
+			if mod (minus_reinforced_count,vasrating_count) == 0 then 
+				UCSVasAcq_pain = VAS_nochange_Run_pain(random(VAS_min_rating,VAS_max_rating), VAS_dur_US); ITI(500);
+				UCSVasAcq_ples = VAS_nochange_Run_ples(random(VAS_min_rating,VAS_max_rating), VAS_dur_US); 
+			end;
+			
+			CS_reinforced 				= "0"; 
+			trigger_codes2 = 2; 
+			figure = picnoch; 
+			
+			minus_count 				= minus_count + 1;
+			minus_reinforced_count 	= minus_reinforced_count + 1;
+	
+		### 3 = CS Relief
+		elseif trigger_codes == 3 then
+			if mod (relief_count,valrating_count) == 0 then
+				term.print("nrRel: " + string(relief_count) + "\t");			
+				CS_Relief.set_duration(CS_dur_if_valrating);
+				CS_Val_rating = CS_Relief_valence_rating();
+			else 
+				term.print("nrRel: " + string(relief_count) + "\t");
+				CS_Relief.set_duration(CS_dur);	
+				CS_Relief();
+			end;
+			
+			CS_reinforced 		= "0"; 
+			trigger_codes2 = 3; 
+			figure = picrelf; 
+			
+			relief_count 		= relief_count + 1;
+		
+		elseif trigger_codes == 33 then	#reinforced
+			if mod (relief_count,valrating_count) == 0 then
+				term.print("nrRel: " + string(relief_count) + "\t");
+				CS_Relief.set_duration(CS_dur_if_reinforced_Valrating);	
+				CS_Val_rating = CS_Relief_reinforced_valence_rating();
+			else 
+				term.print("nrRel: " + string(pain_count) + "\t");
+				CS_Relief.set_duration(CS_dur_if_reinforced);	
+				CS_Relief_reinforced();
+			end;
+		
+			if mod (relief_reinforced_count,vasrating_count) == 0 then # or pain intensity
+				UCSVasAcq_pain = VAS_relief_Run_pain(random(VAS_min_rating,VAS_max_rating), VAS_dur_US); ITI(500);
+				UCSVasAcq_ples = VAS_relief_Run_ples(random(VAS_min_rating,VAS_max_rating), VAS_dur_US); 
+			end;
+			
+			CS_reinforced 				= "1"; 
+			trigger_codes2 = 3; 
+			figure = picrelf; 
+						
+			relief_count 				= relief_count + 1;
+			relief_reinforced_count = relief_reinforced_count + 1;
+		end;
+ 
+		ITI(random(ITI_min_duration, ITI_max_duration));
+		
+		#write to Txt_file
+		output_fearcon_capsaicin_acq.print(
+			string(trial_number) + "\t" + 
+			string(trigger_codes2) + "\t" +
+			string(figure) + "\t" +
+			string(trigger_codes) + "\t" + 			
+			CS_reinforced + "\t" + 
+			
+			CS_Val_rating + "\t" + 
+			UCSVasAcq_pain + "\t" + 
+			UCSVasAcq_ples + "\n"); 
+		
+		#count trials	
+		trial_number = trial_number + 1;
+	end;
+	output_fearcon_capsaicin_acq.close();
+	
+	LogEvent.set_event_code("END AQUISITION"); WriteToLogFile.present();
+	term.print("\n \n End Acquisition Phase \n *************************\n");
+	
+	return subject
+
+end; 
+
+##############################################
+# 3. Kontingenzabfrage (Contingency questions)
+##############################################
+
+sub string Contingency (int number)
+begin
+	LogEvent.set_event_code("BEGIN CONTINGENCY RATING"); WriteToLogFile.present();
+	term.print("\n \n Start Contingency Rating Phase \n *************************\n");
+	
+	# Header Contingency files:
+	string date_time = date_time_gmt();
+	if number == 1 then
+		output_fearcon_capsaicin_con.print("\nStart Contingency 1:\t" + subject + "\t" + "Time:\t" + date_time + "\n");  
+	elseif number == 2 then
+		output_fearcon_capsaicin_con.print("\nStart Contingency 2:\t" + subject + "\t" + "Time:\t" + date_time + "\n");  
+	end;	
+	
+	
+	
+	output_fearcon_capsaicin_con.print("VAS40 = "  + VAS40 + "\n\n");  
+	output_fearcon_capsaicin_con.print("trnr" + "\t" + "CStype" + "\t" + "figure" + "\t" + "VASCON" + "\n"); 
+
+	array <int> trigger_codes_con[3]= {1,2,3}; # 1=Pain, 2=nochange, 3=Relief
+	trigger_codes_con.shuffle();
+	
+	int figure = 0; 
+	
+	loop int trial_number_con = 1 until trial_number_con > trigger_codes_con.count()
+	begin
+		if	trigger_codes_con[trial_number_con] == 1 then
+			
+			CS_Pain.set_duration(CS_dur_conting_rating); 
+			CS_Pain.present();
+			figure = picpain; 
+		
+			VAS_SetQuestion_KON(); VAS_SetScaleFigure (RandomNumber, 1); #VAS_SetScale(); #
+			string KonPainAcq = VAS_US_RATING(random(VAS_min_rating,VAS_max_rating));
+		
+			LogEvent.set_event_code( "VAS KonPain: " + KonPainAcq); WriteToLogFile.present();
+			term.print("\nKonPainAcq: " + KonPainAcq + "\t");
+			
+			output_fearcon_capsaicin_con.print(
+				string(trial_number_con) + "\t" + 
+				string(trigger_codes_con[trial_number_con]) + "\t" +
+				string(figure) + "\t" +
+				KonPainAcq + "\n" );
+			
+			eda_delay();
+			ITI(random(ITI_min_duration, ITI_max_duration));
+	
+		elseif	trigger_codes_con[trial_number_con] == 2 then
+			
+			CS_Minus.set_duration(CS_dur_conting_rating); 	
+			CS_Minus.present();
+			figure = picnoch; 
+
+			VAS_SetQuestion_KON();	VAS_SetScaleFigure (RandomNumber, 2); #VAS_SetScale(); #
+			string KonMinusAcq = VAS_US_RATING(random(VAS_min_rating,VAS_max_rating)); 
+
+			LogEvent.set_event_code( "VAS KonMinus: " + KonMinusAcq); WriteToLogFile.present();
+			term.print("\nKonMinusAcq: " + KonMinusAcq + "\t");
+			
+			output_fearcon_capsaicin_con.print(
+				string(trial_number_con) + "\t" + 
+				string(trigger_codes_con[trial_number_con]) + "\t" +
+				string(figure) + "\t" +
+				KonMinusAcq + "\n" );
+			
+			eda_delay();
+			ITI(random(ITI_min_duration, ITI_max_duration));
+		
+	elseif	trigger_codes_con[trial_number_con] == 3 then	
+		
+			CS_Relief.set_duration(CS_dur_conting_rating); 
+			CS_Relief.present();
+			figure = picrelf; 
+	
+			VAS_SetQuestion_KON(); VAS_SetScaleFigure (RandomNumber, 3); #VAS_SetScale(); #
+			string KonReliefAcq = VAS_US_RATING(random(VAS_min_rating,VAS_max_rating));
+	
+			LogEvent.set_event_code( "VAS KonRelief: " + KonReliefAcq);	WriteToLogFile.present();
+			term.print("\nKonReliefAcq: " + KonReliefAcq + "\t");
+			
+			output_fearcon_capsaicin_con.print(
+				string(trial_number_con) + "\t" + 
+				string(trigger_codes_con[trial_number_con]) + "\t" +
+				string(figure) + "\t" +
+				KonReliefAcq + "\n" );
+			
+			eda_delay();
+			ITI(random(ITI_min_duration, ITI_max_duration));
+			
+		end;
+		trial_number_con = trial_number_con + 1; 
+	end;  
+	
+	if number == 2 then		
+		output_fearcon_capsaicin_con.close();
+	end; 
+
+	LogEvent.set_event_code("END KONTINGENZ"); WriteToLogFile.present();
+	term.print("\n \n End Contingency Rating Phase \n *************************\n");		
+
+return subject
+end; 
+
+#################################
+# 4. Extinction											
+#################################
+
+sub string Extinction
+begin
+	
+	# Header Extinction file
+	string date_time = date_time_gmt();
+   output_fearcon_capsaicin_ext.print("\nStart Extinction:\t" + subject + "\tOrder:\t" + string(RandomNumber) + "\tTime:\t" + date_time);  
+	output_fearcon_capsaicin_ext.print("\nCStype: 1 = CS+Pain, 2 = CS-nochange, 3 = CS+Relief"); 
+	output_fearcon_capsaicin_ext.print("\nFigure: 1 = Quadrat, 2 = Reckteck, 3 = Raute"); 	
+	output_fearcon_capsaicin_ext.print("\nTemperatures: VAS40 = "  + VAS40 + "\n\n");  
+	#output_fearcon_capsaicin_ext.print("trnr" + "\t" + "CStype" + "\t" + "figure" + "\t" + "reinf" + "\t" + "VASCS" + "\t" + "USpain" + "\t" + "USples" + "\n"); 
+	output_fearcon_capsaicin_ext.print("trnr" + "\t" + "CStype" + "\t" + "Figure"  + "\t" + "triggercode" + "\t" + "reinf" + "\t" + "VASCS" + "\t" + "USpain" + "\t" + "USples" + "\n"); 
+
+	LogEvent.set_event_code("BEGIN EXTINCTION");	WriteToLogFile.present();
+	term.print("\n \n Start Extinction Phase \n *************************\n");	
+
+	int figure = 0; 
+	
+		loop int trial_number_ext = 1 until trial_number_ext > trigger_codes_ext.count()
+		begin
+			term.print("\nTrnr: " + string(trial_number_ext) + "\t");
+			
+			if	trigger_codes_ext[trial_number_ext] == 1 then
+				
+				if mod (pain_count_ext,valrating_count) == 0 then	
+					CS_Pain.set_duration(CS_dur_if_valrating);	
+					CS_Val_rating = CS_Pain_valence_rating();
+				else
+					CS_Pain.set_duration(CS_dur);
+					CS_Pain();
+				end;
+				
+				#VAS rating on 4th reinforced trial
+				#if mod ((pain_count_ext + 1),vasrating_count) == 0 then 
+				if pain_count_ext == 5 then
+					UCSVasAcq_pain = VAS_pain_Run_pain(random(VAS_min_rating,VAS_max_rating), VAS_dur_US); ITI(500);
+					UCSVasAcq_ples = VAS_pain_Run_ples(random(VAS_min_rating,VAS_max_rating), VAS_dur_US); 
+				end;	
+				figure = picpain; 
+				pain_count_ext = pain_count_ext + 1;	
+			
+			elseif	trigger_codes_ext[trial_number_ext] == 2 then
+								
+				if mod (minus_count_ext,valrating_count) == 0 then # mod: teilt, wenn der rest 0 ist, dann val rating
+					CS_Minus.set_duration(CS_dur_if_valrating);	#zeit wird auf 1500 gesetzt
+					CS_Val_rating = CS_minus_valence_rating();	#subroutine gestartet mit Valence und anschließend CS
+				else 
+					CS_Minus.set_duration(CS_dur); #9000
+					CS_minus();
+				end;	
+
+				#VAS rating on 4th trial
+				#if mod ((minus_count_ext +1),vasrating_count) == 0 then 
+				if minus_count_ext == 2 || minus_count_ext == 6 || minus_count_ext == 11 then
+					UCSVasAcq_pain = VAS_nochange_Run_pain(random(VAS_min_rating,VAS_max_rating), VAS_dur_US); ITI(500);
+					UCSVasAcq_ples = VAS_nochange_Run_ples(random(VAS_min_rating,VAS_max_rating), VAS_dur_US); 
+				end;	
+				figure = picnoch;
+				minus_count_ext = minus_count_ext + 1;		
+								
+			elseif	trigger_codes_ext[trial_number_ext] == 3 then
+				
+				if mod (relief_count_ext,valrating_count) == 0 then	
+					CS_Relief.set_duration(CS_dur_if_valrating);	
+					CS_Val_rating = CS_Relief_valence_rating();
+				else
+					CS_Relief.set_duration(CS_dur);
+					CS_Relief();
+				end;
+				
+				#VAS pain rating on 4th trial
+				#if mod ((relief_count_ext +1),vasrating_count) == 0 then 
+				if relief_count_ext == 5 then
+					UCSVasAcq_pain = VAS_relief_Run_pain(random(VAS_min_rating,VAS_max_rating), VAS_dur_US); ITI(500);
+					UCSVasAcq_ples = VAS_relief_Run_ples(random(VAS_min_rating,VAS_max_rating), VAS_dur_US); 
+				end;	
+				relief_count_ext = relief_count_ext + 1;	
+				figure = picrelf; 
+			end;
+			
+		ITI(random(ITI_min_duration, ITI_max_duration));
+
+			output_fearcon_capsaicin_ext.print(
+				string(trial_number_ext) + "\t" + 
+				string(trigger_codes_ext[trial_number_ext]) + "\t" + 
+				string(figure) + "\t" + 
+				string(trigger_codes_ext[trial_number_ext]) + "\t" +
+				CS_reinforced + "\t" + 
+				CS_Val_rating + "\t" + 
+				UCSVasAcq_pain + "\t" + 
+				UCSVasAcq_ples + "\n");
+				
+		trial_number_ext= trial_number_ext + 1;
+		end;
+	
+	output_fearcon_capsaicin_ext.close();
+
+	LogEvent.set_event_code("END EXTINCTION"); WriteToLogFile.present();		
+	term.print("\n \n End Extinction Phase \n *************************\n");
+	
+return subject;
+end;
+
+#################################
+# RUN EXPERIMENT
+#################################
+
+
+Habituation();
+Aquisition();
+Contingency(1); 
+Extinction(); 
+Contingency(2);
+
+term.print("\n \n End OF EXPERIMENT \n *************************\n");
+END_TRIAL.present();
+
