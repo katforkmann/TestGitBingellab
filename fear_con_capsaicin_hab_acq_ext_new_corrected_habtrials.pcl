@@ -57,7 +57,7 @@ output_fearcon_capsaicin_ext.open_append("output\\subj_" + subject + "_fearcon_c
 
 ### Trigger Port Codes wegen der SCR
 int port_code_CSPain 	= 255; #Definition der Ports wichtig, Achtung 2 oports!
-int port_code_CSRelief 	= 255; # includede for capsaicin
+int port_code_CSRelief 	= 64; # includede for capsaicin
 int port_code_CSMinus 	= 255;
 
 int port_code_UCSPain 	= 255; # 66
